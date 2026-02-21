@@ -1,0 +1,211 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- [BẢO MẬT] Mã hóa Key: ChiiHaudz
+local obfuscated_key = {67, 104, 105, 105, 72, 97, 117, 100, 122} 
+local function get_key(bytes)
+    local k = ""
+    for i = 1, #bytes do k = k .. string.char(bytes[i]) end
+    return k
+end
+
+local CorrectKey = get_key(obfuscated_key)
+local HasKey = false
+_G.AutoFarmChest = false
+_G.IsTeleporting = false
+_G.FarmSpeed = 150 
+
+local TweenService = game:GetService("TweenService")
+local CurrentTween = nil
+
+-- Hàm Server Hop (Đổi Server)
+local function ServerHop()
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local PlaceId = game.PlaceId
+    local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    
+    for _, s in pairs(Servers.data) do
+        if s.playing < s.maxPlayers and s.id ~= game.JobId then
+            TeleportService:TeleportToPlaceInstance(PlaceId, s.id)
+            break
+        end
+    end
+end
+
+-- Hàm Reset Nhân Vật
+local function ResetCharacter()
+    local player = game.Players.LocalPlayer
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.Health = 0 
+        task.wait(4.5) 
+    end
+end
+
+-- Hàm Bay (Tween)
+local function TweenTo(targetCFrame)
+    local char = game.Players.LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+        if CurrentTween then CurrentTween:Cancel() end 
+        local distance = (root.Position - targetCFrame.Position).Magnitude
+        local duration = distance / _G.FarmSpeed
+        local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+        CurrentTween = TweenService:Create(root, info, {CFrame = targetCFrame})
+        CurrentTween:Play()
+        return CurrentTween
+    end
+end
+
+-- Kiểm tra Sea
+local function GetCurrentSea()
+    local placeId = game.PlaceId
+    if placeId == 2753915549 then return "Sea 1"
+    elseif placeId == 4442245419 then return "Sea 2"
+    elseif placeId == 7449925069 then return "Sea 3"
+    else return "Unknown" end
+end
+local CurrentSea = GetCurrentSea()
+
+local Window = Rayfield:CreateWindow({
+   Name = "🏴‍☠️ Blox Fruits: Chii Hauu HUB",
+   LoadingTitle = "Hệ Thống Farm Rương Tối Ưu",
+   LoadingSubtitle = "by Chii Hauu | " .. CurrentSea,
+   KeySystem = false, 
+   Keybind = "LeftControl"
+})
+
+-- Hàm lấy rương gần nhất
+local function GetChest()
+    local target = nil
+    local minDist = math.huge
+    local playerChar = game.Players.LocalPlayer.Character
+    if not playerChar or not playerChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local pos = playerChar.HumanoidRootPart.Position
+
+    for _, v in pairs(game.Workspace:GetChildren()) do
+        if v:IsA("BasePart") and v.Name:find("Chest") then
+            local dist = (v.Position - pos).Magnitude
+            if dist < minDist then
+                minDist = dist
+                target = v
+            end
+        end
+    end
+    if not target then
+        for _, v in pairs(game.Workspace:GetDescendants()) do
+            if v:IsA("BasePart") and v.Name:find("Chest") then
+                local dist = (v.Position - pos).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    target = v
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- Logic Farm Rương
+function doFarmChest()
+    task.spawn(function()
+        while _G.AutoFarmChest do
+            task.wait(0.01)
+            pcall(function()
+                local player = game.Players.LocalPlayer
+                local char = player.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if root then
+                    local targetChest = GetChest()
+                    if targetChest then
+                        local distanceToChest = (targetChest.Position - root.Position).Magnitude
+                        if distanceToChest > 3500 then
+                            ResetCharacter()
+                            return
+                        end
+                        _G.IsTeleporting = true
+                        TweenTo(targetChest.CFrame * CFrame.new(0, 2, 0))
+                        local timeout = 0
+                        while targetChest.Parent and _G.AutoFarmChest and timeout < 100 do
+                            if (targetChest.Position - root.Position).Magnitude < 5 then
+                                task.wait(0.2)
+                                break
+                            end
+                            task.wait(0.1)
+                            timeout = timeout + 1
+                        end
+                        if CurrentTween then CurrentTween:Cancel() end
+                        _G.IsTeleporting = false
+                    else
+                        -- Khi không còn rương nào trong server
+                        _G.IsTeleporting = false
+                        Rayfield:Notify({Title = "HẾT RƯƠNG", Content = "Đang tự động đổi Server...", Duration = 3})
+                        task.wait(1)
+                        ServerHop()
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+-- Noclip
+game:GetService("RunService").Stepped:Connect(function()
+    pcall(function()
+        local char = game.Players.LocalPlayer.Character
+        if char and (_G.AutoFarmChest or _G.IsTeleporting) then
+            for _, v in pairs(char:GetDescendants()) do
+                if v:IsA("BasePart") and v.CanCollide then 
+                    v.CanCollide = false 
+                end
+            end
+        end
+    end)
+end)
+
+-- TABS
+local KeyTab = Window:CreateTab("🔑 Key")
+local MainTab = Window:CreateTab("💰 Farm Rương")
+local ServerTab = Window:CreateTab("🌐 Server")
+
+KeyTab:CreateInput({
+   Name = "Nhập Key",
+   PlaceholderText = "Nhập key tại đây...",
+   Callback = function(Text)
+      if Text == CorrectKey then 
+         HasKey = true 
+         Rayfield:Notify({Title = "THÀNH CÔNG", Content = "Chào Chii Hauu!", Duration = 5})
+      else
+         Rayfield:Notify({Title = "SAI KEY", Content = "Vui lòng kiểm tra lại!", Duration = 5})
+      end
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Bật Auto Farm Chest",
+   CurrentValue = false,
+   Callback = function(Value)
+      if HasKey then
+         _G.AutoFarmChest = Value
+         if Value then doFarmChest() end
+      else
+         Rayfield:Notify({Title = "LỖI", Content = "Hãy nhập Key!", Duration = 5})
+      end
+   end,
+})
+
+ServerTab:CreateButton({
+   Name = "Chuyển Server Ngay (Server Hop)",
+   Callback = function()
+      ServerHop()
+   end,
+})
+
+MainTab:CreateButton({
+   Name = "🛑 Dừng Script",
+   Callback = function()
+      _G.AutoFarmChest = false
+      if CurrentTween then CurrentTween:Cancel() end
+      Rayfield:Destroy()
+   end,
+})
